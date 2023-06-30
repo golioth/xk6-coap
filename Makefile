@@ -4,7 +4,7 @@
 setup:
 ifeq (, $(shell which xk6))
 	@echo installing xk6
-	@go install go.k6.io/xk6/cmd/xk6@latest
+	@go install go.k6.io/xk6/cmd/xk6@v0.9.2
 	@echo xk6 successfully installed
 endif
 
