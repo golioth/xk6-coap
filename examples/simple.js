@@ -1,12 +1,15 @@
+import { fail } from 'k6';
+import { setTimeout } from "k6/x/timers"
 import { Client } from 'k6/x/coap';
+
 
 export default function() {
 	// Create new client and connect.
 	let client;
 	try {
-		client = new Client("coap.golioth.io:5684");
+		client = new Client("coap.golioth.dev:5684");
 	} catch (e) {
-		console.log(e);
+		fail(e);
 	}
 
 	// Verify connection.
@@ -14,7 +17,7 @@ export default function() {
 		let res = client.get("/hello", 10);
 		console.log(String.fromCharCode(...res.body));
 	} catch (e) {
-		console.log(e);
+		fail(e);
 	}
 
 	// Send data.
@@ -22,7 +25,7 @@ export default function() {
 		let res = client.post("/.s", "application/json", '{"hello": "world"}', 10);
 		console.log(res.code);
 	} catch (e) {
-		console.log(e);
+		fail(e);
 	}
 
 	// Get JSON data.
@@ -31,13 +34,54 @@ export default function() {
 		let json = JSON.parse(String.fromCharCode(...res.body));
 		console.log(json.sequenceNumber);
 	} catch (e) {
-		console.log(e);
+		fail(e);
 	}
 
-	// Close connection.
+	// Start RPC observation.
 	try {
-		client.close();
+		client.observe("/.rpc", 15, (req) => {
+			let json;
+			try {
+				json = JSON.parse(String.fromCharCode(...req.body));
+			} catch (e) {
+				// First message is acknowledgement of
+				// observation.
+				console.log(e);
+				return;
+			}
+			try {
+				console.log(json);
+				client.post("/.rpc/status", "application/json", '{"id": "' + json.id + '", "statusCode": 0, "detail":"ack"}', 10);
+			} catch (e) {
+				fail(e);
+			}
+		});
 	} catch (e) {
-		console.log(e);
+		fail(e);
 	}
+
+	// Start OTA observation.
+	try {
+		client.observe("/.u/desired", 15, (req) => {
+			let json;
+			try {
+				json = JSON.parse(String.fromCharCode(...req.body));
+			} catch (e) {
+				return;
+			}
+			console.log(json);
+		});
+	} catch (e) {
+		fail(e);
+	}
+
+	// Wait for observations to complete.
+	setTimeout(() => {
+		// Close connection.
+		try {
+			client.close();
+		} catch (e) {
+			fail(e);
+		}
+	}, 20000)
 }
