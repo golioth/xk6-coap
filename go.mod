@@ -4,6 +4,7 @@ go 1.20
 
 require (
 	github.com/dop251/goja v0.0.0-20230402114112-623f9dda9079
+	github.com/mstoykov/k6-taskqueue-lib v0.1.0
 	github.com/pion/dtls/v2 v2.2.6
 	github.com/plgd-dev/go-coap/v3 v3.1.2
 	go.k6.io/k6 v0.44.1

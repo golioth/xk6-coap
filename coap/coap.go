@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dop251/goja"
+	"github.com/mstoykov/k6-taskqueue-lib/taskqueue"
 	piondtls "github.com/pion/dtls/v2"
 	"github.com/plgd-dev/go-coap/v3/dtls"
 	"github.com/plgd-dev/go-coap/v3/message"
@@ -22,8 +23,8 @@ const (
 	defaultPSKIDEnv = "COAP_PSK_ID"
 )
 
-// Response is a CoAP response message.
-type Response struct {
+// Message is a CoAP message.
+type Message struct {
 	Code string
 	Body []byte
 }
@@ -89,6 +90,7 @@ func (c *CoAP) client(cc goja.ConstructorCall) *goja.Object {
 
 	client := &client{
 		vu:   c.vu,
+		tq:   taskqueue.New(c.vu.RegisterCallback),
 		conn: conn,
 		obj:  rt.NewObject(),
 	}
@@ -117,119 +119,139 @@ func (c *CoAP) client(cc goja.ConstructorCall) *goja.Object {
 // client is a CoAP client with a DTLS connection.
 type client struct {
 	vu   modules.VU
+	tq   *taskqueue.TaskQueue
 	conn *udp.Conn
 	obj  *goja.Object
 }
 
 // Get sends a GET message to the specified path.
-func (c *client) Get(path string, timeout int) Response {
+func (c *client) Get(path string, timeout int) Message {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(timeout))
 	defer cancel()
-	resp, err := c.conn.Get(ctx, path)
+	msg, err := c.conn.Get(ctx, path)
 	if err != nil {
 		common.Throw(c.vu.Runtime(), err)
 	}
 	var b []byte
-	if body := resp.Body(); body != nil {
+	if body := msg.Body(); body != nil {
 		if b, err = io.ReadAll(body); err != nil {
 			common.Throw(c.vu.Runtime(), err)
 		}
 	}
-	return Response{
-		Code: resp.Code().String(),
+	return Message{
+		Code: msg.Code().String(),
 		Body: b,
 	}
 }
 
 // Observe sends an OBSERVE message to the specified path. It waits for messages
 // until the specified timeout.
-func (c *client) Observe(path string, timeout int) {
+func (c *client) Observe(path string, timeout int, listener func(Message)) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(timeout))
-	defer cancel()
-	obs, err := c.conn.Observe(ctx, path, func(req *pool.Message) {
-		// TODO(hasheddan): emit metrics on observed messages.
+
+	obs, err := c.conn.Observe(ctx, path, func(msg *pool.Message) {
+		var b []byte
+		var err error
+		if body := msg.Body(); body != nil {
+			if b, err = io.ReadAll(body); err != nil {
+				common.Throw(c.vu.Runtime(), err)
+				return
+			}
+		}
+		c.tq.Queue(func() error {
+			listener(Message{
+				Code: msg.Code().String(),
+				Body: b,
+			})
+			return nil
+		})
 	})
 	if err != nil {
+		defer cancel()
 		common.Throw(c.vu.Runtime(), err)
+		return
 	}
-	<-ctx.Done()
-	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	if err := obs.Cancel(ctx); err != nil {
-		common.Throw(c.vu.Runtime(), err)
-	}
+	go func() {
+		<-ctx.Done()
+		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := obs.Cancel(ctx); err != nil {
+			c.vu.State().Logger.Warnf("failed to cancel observation: %v", err)
+		}
+	}()
 }
 
 // Put sends a PUT message with the provided content to the specified path.
-func (c *client) Put(path, mediaType string, content []byte, timeout int) Response {
+func (c *client) Put(path, mediaType string, content []byte, timeout int) Message {
 	mt, err := message.ToMediaType(mediaType)
 	if err != nil {
 		common.Throw(c.vu.Runtime(), err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(timeout))
 	defer cancel()
-	resp, err := c.conn.Put(ctx, path, mt, bytes.NewReader(content))
+	msg, err := c.conn.Put(ctx, path, mt, bytes.NewReader(content))
 	if err != nil {
 		common.Throw(c.vu.Runtime(), err)
 	}
 	var b []byte
-	if body := resp.Body(); body != nil {
+	if body := msg.Body(); body != nil {
 		if b, err = io.ReadAll(body); err != nil {
 			common.Throw(c.vu.Runtime(), err)
 		}
 	}
-	return Response{
-		Code: resp.Code().String(),
+	return Message{
+		Code: msg.Code().String(),
 		Body: b,
 	}
 }
 
 // Post sends a POST message with the provided content to the specified path.
-func (c *client) Post(path, mediaType string, content []byte, timeout int) Response {
+func (c *client) Post(path, mediaType string, content []byte, timeout int) Message {
 	mt, err := message.ToMediaType(mediaType)
 	if err != nil {
 		common.Throw(c.vu.Runtime(), err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(timeout))
 	defer cancel()
-	resp, err := c.conn.Post(ctx, path, mt, bytes.NewReader(content))
+	msg, err := c.conn.Post(ctx, path, mt, bytes.NewReader(content))
 	if err != nil {
 		common.Throw(c.vu.Runtime(), err)
 	}
 	var b []byte
-	if body := resp.Body(); body != nil {
+	if body := msg.Body(); body != nil {
 		if b, err = io.ReadAll(body); err != nil {
 			common.Throw(c.vu.Runtime(), err)
 		}
 	}
-	return Response{
-		Code: resp.Code().String(),
+	return Message{
+		Code: msg.Code().String(),
 		Body: b,
 	}
 }
 
 // Post sends a POST message with the provided content to the specified path.
-func (c *client) Delete(path string, timeout int) Response {
+func (c *client) Delete(path string, timeout int) Message {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(timeout))
 	defer cancel()
-	resp, err := c.conn.Delete(ctx, path)
+	msg, err := c.conn.Delete(ctx, path)
 	if err != nil {
 		common.Throw(c.vu.Runtime(), err)
 	}
 	var b []byte
-	if body := resp.Body(); body != nil {
+	if body := msg.Body(); body != nil {
 		if b, err = io.ReadAll(body); err != nil {
 			common.Throw(c.vu.Runtime(), err)
 		}
 	}
-	return Response{
-		Code: resp.Code().String(),
+	return Message{
+		Code: msg.Code().String(),
 		Body: b,
 	}
 }
 
 // Close closes the underlying connection.
 func (c *client) Close() {
+	defer c.tq.Close()
 	if err := c.conn.Close(); err != nil {
 		common.Throw(c.vu.Runtime(), err)
 	}

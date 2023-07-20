@@ -12,4 +12,4 @@ endif
 # Targets
 
 build: setup
-	@xk6 build --with github.com/golioth/xk6-coap=.
+	@xk6 build --with github.com/golioth/xk6-coap=. --with github.com/grafana/xk6-timers
