@@ -20,8 +20,48 @@ example, the following command would run the [simple
 example](./examples/simple.js) from this repository.
 
 ```
-docker run -it --rm -v $(pwd)/examples/simple.js:/simple.js goliothiot/xk6-coap k6 run /simple.js --vus 10 --duration 5s
+docker run -it --rm -e COAP_PSK_ID=<YOUR-PSK-ID> -e COAP_PSK=<YOUR-PSK> -v $(pwd)/examples/simple.js:/simple.js goliothiot/xk6-coap k6 run /simple.js --vus 10 --duration 5s
 ```
+
+`xk6-coap` supports authentication via pre-shared keys (PSKs) and client
+certificates. The former is provided by specifying environment variables, while
+the latter is provided by specifying file paths. The `simple.js` example passes
+`COAP_PSK_ID` and `COAP_PSK` to the instantiated `Client`, which will cause it
+use use the respective values for PSK authentication. If a `Client` is
+instantiated with both PSK environment variables and certificate file paths,
+certificate authentication will take precedence.
+
+```js
+client = new Client(
+	"coap.golioth.io:5684",
+	"COAP_PSK_ID",
+	"COAP_PSK",
+);
+```
+> Only PSK is provided and it will be used for authentication.
+
+```js
+client = new Client(
+	"coap.golioth.io:5684",
+	"",
+	"",
+	"path/to/client/crt.pem",
+	"path/to/client/key.pem",
+);
+```
+> Only certificate is provided and it will be used for authentication.
+
+```js
+client = new Client(
+	"coap.golioth.io:5684",
+	"COAP_PSK_ID",
+	"COAP_PSK",
+	"path/to/client/crt.pem",
+	"path/to/client/key.pem",
+);
+```
+> Both are provided but certificate takes precedence.
+
 
 ### Building a k6 Binary
 
@@ -34,15 +74,9 @@ produces a valid build.
 make build
 ```
 
-This will produce a `k6` binary in the current working directory. It can be used
-to execute a simple load test (`simple.js`) that will spin up the specified
-number of virtual users (vu's) and establish observations for 10 seconds.
-`xk6-coap` currently requires the use of Pre-Shared Keys (PSKs) for connecting
-to CoAP endpoints. By default, the values of the `COAP_PSK` and `COAP_PSK_ID`
-environment variables will be used for the key and ID respectively.
-
-To execute a test with 2 virtual users making connections and sending `GET`
-messages for 5 seconds, the following command could be run.
+This will produce a `k6` binary in the current working directory. To execute a
+test with 2 virtual users making connections and sending `GET` messages for 5
+seconds, the following command could be run.
 
 ```
 ./k6 run ./examples/simple.js --vus 10 --duration 5s
