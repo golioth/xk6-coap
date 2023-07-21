@@ -1,2 +1,6 @@
+# k6 Artifacts
 k6
 **/reports
+
+# Credentials
+*.pem
