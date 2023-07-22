@@ -3,8 +3,12 @@ package coap
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/dop251/goja"
@@ -19,8 +23,11 @@ import (
 )
 
 const (
-	defaultPSKEnv   = "COAP_PSK"
-	defaultPSKIDEnv = "COAP_PSK_ID"
+	endpointArgIdx = 1
+	pskIDEnvArgIdx = 2
+	pskEnvArgIdx   = 3
+	certPathArgIdx = 4
+	keyPathArgIdx  = 5
 )
 
 // Message is a CoAP message.
@@ -59,33 +66,66 @@ func (c *CoAP) Exports() modules.Exports {
 // the provided server endpoint.
 func (c *CoAP) client(cc goja.ConstructorCall) *goja.Object {
 	rt := c.vu.Runtime()
-	endpoint := cc.Argument(0).String()
-	pskIDEnv := defaultPSKIDEnv
-	if !goja.IsUndefined(cc.Argument(1)) {
-		pskIDEnv = cc.Argument(1).String()
-	}
-	pskID, _ := os.LookupEnv(pskIDEnv)
-	pskEnv := defaultPSKEnv
-	if !goja.IsUndefined(cc.Argument(2)) {
-		pskEnv = cc.Argument(2).String()
-	}
-	psk, _ := os.LookupEnv(pskEnv)
-	conn, err := dtls.Dial(endpoint, &piondtls.Config{
-		PSK: func(hint []byte) ([]byte, error) {
-			return []byte(psk), nil
-		},
-		PSKIdentityHint: []byte(pskID),
+	endpoint := cc.Argument(endpointArgIdx).String()
+	conf := &piondtls.Config{
 		ConnectContextMaker: func() (context.Context, func()) {
 			return context.WithTimeout(context.Background(), 10*time.Second)
 		},
-		CipherSuites: []piondtls.CipherSuiteID{
-			piondtls.TLS_PSK_WITH_AES_128_CCM,
-			piondtls.TLS_PSK_WITH_AES_128_CCM_8,
+	}
+
+	// Only ECDSA keys are currently supported.
+	if !goja.IsUndefined(cc.Argument(certPathArgIdx)) && !goja.IsUndefined(cc.Argument(keyPathArgIdx)) {
+		pemCert, err := os.ReadFile(filepath.Clean(cc.Argument(certPathArgIdx).String()))
+		if err != nil {
+			common.Throw(rt, err)
+			return nil
+		}
+		certBlock, _ := pem.Decode(pemCert)
+		pemKey, err := os.ReadFile(filepath.Clean(cc.Argument(certPathArgIdx).String()))
+		if err != nil {
+			common.Throw(rt, err)
+			return nil
+		}
+		keyBlock, _ := pem.Decode(pemKey)
+		key, err := x509.ParseECPrivateKey(keyBlock.Bytes)
+		if err != nil {
+			common.Throw(rt, err)
+			return nil
+		}
+		conf.Certificates = []tls.Certificate{
+			{
+				Certificate: [][]byte{certBlock.Bytes},
+				PrivateKey:  key,
+			},
+		}
+		conf.CipherSuites = []piondtls.CipherSuiteID{
+			piondtls.TLS_ECDHE_ECDSA_WITH_AES_128_CCM,
+			piondtls.TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8,
+			piondtls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+		}
+	}
+
+	// If certificates were provided, they take precedence over PSK as
+	// piondtls will always use PSK if provided.
+	if len(conf.Certificates) == 0 && !goja.IsUndefined(cc.Argument(pskIDEnvArgIdx)) && !goja.IsUndefined(cc.Argument(pskEnvArgIdx)) {
+		pskID, _ := os.LookupEnv(cc.Argument(pskIDEnvArgIdx).String())
+		conf.PSKIdentityHint = []byte(pskID)
+		psk, _ := os.LookupEnv(cc.Argument(pskEnvArgIdx).String())
+		conf.PSK = func(hint []byte) ([]byte, error) {
+			return []byte(psk), nil
+		}
+		conf.CipherSuites = []piondtls.CipherSuiteID{
+			piondtls.TLS_PSK_WITH_AES_128_CBC_SHA256,
 			piondtls.TLS_PSK_WITH_AES_128_GCM_SHA256,
-		},
-	})
+			piondtls.TLS_PSK_WITH_AES_128_CCM_8,
+			piondtls.TLS_PSK_WITH_AES_128_CCM,
+		}
+	}
+
+	conn, err := dtls.Dial(endpoint, conf)
 	if err != nil {
 		common.Throw(rt, err)
+		return nil
 	}
 
 	client := &client{
@@ -97,21 +137,27 @@ func (c *CoAP) client(cc goja.ConstructorCall) *goja.Object {
 
 	if err := client.obj.DefineDataProperty("get", rt.ToValue(client.Get), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE); err != nil {
 		common.Throw(rt, err)
+		return nil
 	}
 	if err := client.obj.DefineDataProperty("observe", rt.ToValue(client.Observe), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE); err != nil {
 		common.Throw(rt, err)
+		return nil
 	}
 	if err := client.obj.DefineDataProperty("put", rt.ToValue(client.Put), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE); err != nil {
 		common.Throw(rt, err)
+		return nil
 	}
 	if err := client.obj.DefineDataProperty("post", rt.ToValue(client.Post), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE); err != nil {
 		common.Throw(rt, err)
+		return nil
 	}
 	if err := client.obj.DefineDataProperty("delete", rt.ToValue(client.Delete), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE); err != nil {
 		common.Throw(rt, err)
+		return nil
 	}
 	if err := client.obj.DefineDataProperty("close", rt.ToValue(client.Close), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE); err != nil {
 		common.Throw(rt, err)
+		return nil
 	}
 	return client.obj
 }
@@ -131,11 +177,13 @@ func (c *client) Get(path string, timeout int) Message {
 	msg, err := c.conn.Get(ctx, path)
 	if err != nil {
 		common.Throw(c.vu.Runtime(), err)
+		return Message{}
 	}
 	var b []byte
 	if body := msg.Body(); body != nil {
 		if b, err = io.ReadAll(body); err != nil {
 			common.Throw(c.vu.Runtime(), err)
+			return Message{}
 		}
 	}
 	return Message{
@@ -192,11 +240,13 @@ func (c *client) Put(path, mediaType string, content []byte, timeout int) Messag
 	msg, err := c.conn.Put(ctx, path, mt, bytes.NewReader(content))
 	if err != nil {
 		common.Throw(c.vu.Runtime(), err)
+		return Message{}
 	}
 	var b []byte
 	if body := msg.Body(); body != nil {
 		if b, err = io.ReadAll(body); err != nil {
 			common.Throw(c.vu.Runtime(), err)
+			return Message{}
 		}
 	}
 	return Message{
@@ -216,11 +266,13 @@ func (c *client) Post(path, mediaType string, content []byte, timeout int) Messa
 	msg, err := c.conn.Post(ctx, path, mt, bytes.NewReader(content))
 	if err != nil {
 		common.Throw(c.vu.Runtime(), err)
+		return Message{}
 	}
 	var b []byte
 	if body := msg.Body(); body != nil {
 		if b, err = io.ReadAll(body); err != nil {
 			common.Throw(c.vu.Runtime(), err)
+			return Message{}
 		}
 	}
 	return Message{
@@ -236,11 +288,13 @@ func (c *client) Delete(path string, timeout int) Message {
 	msg, err := c.conn.Delete(ctx, path)
 	if err != nil {
 		common.Throw(c.vu.Runtime(), err)
+		return Message{}
 	}
 	var b []byte
 	if body := msg.Body(); body != nil {
 		if b, err = io.ReadAll(body); err != nil {
 			common.Throw(c.vu.Runtime(), err)
+			return Message{}
 		}
 	}
 	return Message{

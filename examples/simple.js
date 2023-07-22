@@ -7,7 +7,13 @@ export default function() {
 	// Create new client and connect.
 	let client;
 	try {
-		client = new Client("coap.golioth.dev:5684");
+		client = new Client(
+			"coap.golioth.io:5684",
+			"COAP_PSK_ID",
+			"COAP_PSK",
+			// path/to/client/crt.pem,
+			// path/to/client/key.pem,
+		);
 	} catch (e) {
 		fail(e);
 	}
