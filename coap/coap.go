@@ -23,11 +23,11 @@ import (
 )
 
 const (
-	endpointArgIdx = 1
-	pskIDEnvArgIdx = 2
-	pskEnvArgIdx   = 3
-	certPathArgIdx = 4
-	keyPathArgIdx  = 5
+	endpointArgIdx = 0
+	pskIDEnvArgIdx = 1
+	pskEnvArgIdx   = 2
+	certPathArgIdx = 3
+	keyPathArgIdx  = 4
 )
 
 // Message is a CoAP message.
@@ -81,7 +81,7 @@ func (c *CoAP) client(cc goja.ConstructorCall) *goja.Object {
 			return nil
 		}
 		certBlock, _ := pem.Decode(pemCert)
-		pemKey, err := os.ReadFile(filepath.Clean(cc.Argument(certPathArgIdx).String()))
+		pemKey, err := os.ReadFile(filepath.Clean(cc.Argument(keyPathArgIdx).String()))
 		if err != nil {
 			common.Throw(rt, err)
 			return nil
