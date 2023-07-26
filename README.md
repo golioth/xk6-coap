@@ -89,3 +89,11 @@ seconds, the following command could be run.
 
 Reference the [`k6` documentation](https://k6.io/docs/using-k6/test-lifecycle/)
 for more information on how to configure and run tests.
+
+## Attribution
+
+`xk6-coap` is essentially glue machinery that allows for
+[`plgd-dev/go-coap`](https://github.com/plgd-dev/go-coap) /
+[`pion/dtls`](https://github.com/plgd-dev/go-coap) functionality to be exposed
+to `k6` tests. This project would not be possible without the work done by
+contributors (some of whom are on the Golioth team!) on both of those projects.
