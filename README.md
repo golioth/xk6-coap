@@ -4,6 +4,11 @@
 [Constrained Application Protocol
 (CoAP)](https://www.rfc-editor.org/rfc/rfc7252).
 
+> **MATURITY NOTICE**: `xk6-coap` is under active development and breaking API
+> changes are to be expected. The project has been open sourced early to ensure
+> that external consumers have an opportunity to influence and contribute to its
+> future direction.
+
 ## Getting Started
 
 To get started, either build the `k6` binary or use the
