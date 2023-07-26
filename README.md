@@ -4,6 +4,11 @@
 [Constrained Application Protocol
 (CoAP)](https://www.rfc-editor.org/rfc/rfc7252).
 
+> **MATURITY NOTICE**: `xk6-coap` is under active development and breaking API
+> changes are to be expected. The project has been open sourced early to ensure
+> that external consumers have an opportunity to influence and contribute to its
+> future direction.
+
 ## Getting Started
 
 To get started, either build the `k6` binary or use the
@@ -84,3 +89,11 @@ seconds, the following command could be run.
 
 Reference the [`k6` documentation](https://k6.io/docs/using-k6/test-lifecycle/)
 for more information on how to configure and run tests.
+
+## Attribution
+
+`xk6-coap` is essentially glue machinery that allows for
+[`plgd-dev/go-coap`](https://github.com/plgd-dev/go-coap) /
+[`pion/dtls`](https://github.com/plgd-dev/go-coap) functionality to be exposed
+to `k6` tests. This project would not be possible without the work done by
+contributors (some of whom are on the Golioth team!) on both of those projects.
