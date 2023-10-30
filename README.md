@@ -12,12 +12,12 @@
 ## Getting Started
 
 To get started, either build the `k6` binary or use the
-[`goliothiot/xk6-coap`](https://hub.docker.com/repository/docker/goliothiot/xk6-coap)
+[`golioth/xk6-coap`](https://hub.docker.com/repository/docker/golioth/xk6-coap)
 image.
 
 ### Using the OCI Image
 
-The quickest way to get started is by using the `goliothiot/xk6-coap` image,
+The quickest way to get started is by using the `golioth/xk6-coap` image,
 which is [built](./images/xk6-coap/Dockerfile) from this repository and
 published to DockerHub. Tests can be supplied when creating a container from the
 image via a [bind mount](https://docs.docker.com/storage/bind-mounts/). For
@@ -25,7 +25,7 @@ example, the following command would run the [simple
 example](./examples/simple.js) from this repository.
 
 ```
-docker run -it --rm -e COAP_PSK_ID=<YOUR-PSK-ID> -e COAP_PSK=<YOUR-PSK> -v $(pwd)/examples/simple.js:/simple.js goliothiot/xk6-coap k6 run /simple.js --vus 10 --duration 5s
+docker run -it --rm -e COAP_PSK_ID=<YOUR-PSK-ID> -e COAP_PSK=<YOUR-PSK> -v $(pwd)/examples/simple.js:/simple.js golioth/xk6-coap k6 run /simple.js --vus 10 --duration 5s
 ```
 
 `xk6-coap` supports authentication via pre-shared keys (PSKs) and client
